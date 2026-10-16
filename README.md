@@ -6,7 +6,7 @@ Este repositorio expone una API REST para consultar precios históricos, tipos d
 
 ## 1. Objetivo
 
-Implementar el backend de un MVP que permita:
+Implementar el backend de un MVP que permita: dsasaddsasad
 
 - Consultar productos, tiendas y precios históricos.
 - Calcular variaciones de precios y tipos de cambio.
