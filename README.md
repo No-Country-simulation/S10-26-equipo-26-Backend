@@ -18,6 +18,23 @@ Implementar el backend de un MVP que permita:
 
 El objetivo es demostrar un flujo completo desde la recolección de datos hasta la visualización de indicadores y alertas.
 
+### Problemas clave del proyecto y responsabilidad de este repo
+
+El equipo enfrenta tres problemas técnicos centrales (detalle en `problematica.md` en la raíz del proyecto; plan de trabajo ágil en `PLAN-AGIL.md`). Este repo es el dueño del esquema de datos y los contratos de API:
+
+| Problema | Responsabilidad del Backend | Decisión clave |
+|---|---|---|
+| **1. Identidad de productos entre tiendas** | Modelo `products` (catálogo canónico) + `store_products` (puente por tienda con `external_id`, `source_url` y nombre crudo). Endpoints para gestionar y consultar el mapeo. | El matching es **curado manualmente** por el equipo; el Backend expone únicamente el mapeo validado. |
+| **2. Promociones, stock y reduflación** | `is_promotion` y `price_before` en `price_observations`; cálculo de precio regular vs promo; **exclusión de promos** del índice de inflación base; alerta (`anomaly_alerts`) cuando cambia la presentación/gramaje (`reference_unit`). | El índice de inflación base usa **solo precios regulares**. La mediana móvil es el método candidato. |
+| **3. Sincronización timestamp ↔ tipo de cambio** | Tabla `exchange_rates` con `observed_at`. El `price_usd` se calcula **en consulta/analytics** mediante un join con la cotización más cercana anterior al timestamp de la observación, **no** en la ingesta. | Se persiste el precio en moneda local + crudo; la conversión a USD es **una vista calculada**, no un dato almacenado. |
+
+Flujo de datos y orden de dependencias:
+
+- `data` recolecta (scraper + FX) y entrega observaciones crudas.
+- `backend` persiste, calcula indicadores y alertas, y expone la API REST.
+- `frontend` consume la API; no recalcula indicadores.
+- Orden de implementación: **Backend primero** (define esquema y contratos), **Data en paralelo** (contra el contrato), **Frontend al final** (sobre el API).
+
 ## 2. Alcance del MVP
 
 ### Incluido
@@ -133,17 +150,25 @@ Campos propuestos: `id`, `name`, `base_url`, `country_code`, `currency_code`.
 
 ### `store_products`
 
-Relación entre un producto normalizado y su publicación en una tienda.
+Relación entre un producto canónico y su publicación en una tienda. Es el puente que resuelve el problema 1: un mismo producto puede tener nombres y códigos distintos en cada e-commerce.
 
-Campos propuestos: `id`, `product_id`, `store_id`, `external_id`, `source_url`, `source_name`.
+Campos propuestos: `id`, `product_id`, `store_id`, `external_id`, `source_url`, `source_name` (nombre crudo publicado por la tienda).
+
+Restricción recomendada: única por `(store_id, external_id)` para evitar duplicados de la misma publicación.
 
 ### `price_observations`
 
 Historial de precios observados.
 
-Campos propuestos: `id`, `store_product_id`, `price`, `currency_code`, `is_promotion`, `observed_at`, `fetched_at`.
+Campos propuestos: `id`, `store_product_id`, `price`, `price_before` (precio tachado, nullable), `currency_code`, `is_promotion`, `is_available`, `observed_at`, `fetched_at`.
 
 Cada observación debe conservar su precio y moneda originales. Los nuevos precios deben generar nuevas observaciones, sin sobrescribir el historial.
+
+**Reglas derivadas de la problemática:**
+
+- `observed_at` es el momento al que corresponde el precio (captura); `fetched_at` es el momento en que el sistema lo obtuvo.
+- El precio convertido a USD **no se persiste aquí**: se calcula en tiempo de consulta con la cotización vigente en `observed_at` (join as-of sobre `exchange_rates`).
+- `is_promotion` y `price_before` alimentan la exclusión de promos del índice de inflación base.
 
 ### `exchange_rates`
 
@@ -153,9 +178,11 @@ Campos propuestos: `id`, `base_currency`, `quote_currency`, `rate`, `observed_at
 
 ### `anomaly_alerts`
 
-Registro de posibles anomalías.
+Registro de posibles anomalías y alertas de negocio.
 
 Campos propuestos: `id`, `price_observation_id`, `anomaly_type`, `severity`, `score`, `description`, `created_at`, `status`.
+
+`anomaly_type` debe contemplar al menos: `spike` (pico de precio), `shrinkflation` (cambio de presentación/gramaje) y `outpace_devaluation` (el producto aumentó más que la devaluación en el período).
 
 Los campos y restricciones definitivos deben reflejar las necesidades reales del MVP. Las migraciones de esquema deben gestionarse desde este repositorio.
 
@@ -277,14 +304,24 @@ Antes de implementar la integración, ambos repositorios deben acordar un único
 Cada registro debería contener como mínimo:
 
 - Fuente o tienda.
-- Identificador de la publicación, cuando exista.
-- Nombre del producto.
-- Precio original.
+- Identificador de la publicación (`external_id`), cuando exista.
+- Nombre del producto tal como lo publica la tienda (nombre crudo).
+- Marca y categoría cuando estén disponibles.
+- Precio actual (`price`).
+- Precio tachado o anterior (`price_before`) cuando exista.
 - Código de moneda.
+- Disponibilidad (`is_available`).
+- Señales de promoción (badge, `2x1`, etc.).
+- Presentación/gramaje crudo, si la tienda lo expone (base para detectar reduflación).
 - URL de origen.
 - `observed_at`.
 - `fetched_at`.
-- Información de promoción cuando esté disponible.
+
+Reglas de integración derivadas de la problemática:
+
+- El pipeline **no** debe convertir precios a USD; entrega siempre moneda local cruda.
+- El Backend es el responsable del esquema, las migraciones y la conversión a USD en consulta.
+- El mapeo `store_products → products` es la fuente única de identidad canónica; el pipeline solo aporta los datos crudos para construirlo.
 
 ### Estrategia recomendada para el MVP
 
