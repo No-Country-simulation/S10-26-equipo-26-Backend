@@ -341,7 +341,7 @@ APP_ENV=development
 API_V1_PREFIX=/api/v1
 LOG_LEVEL=INFO
 
-DATABASE_URL=postgresql+psycopg://pricescope:pricescope@localhost:5432/pricescope
+DATABASE_URL=postgresql+psycopg://pricescope:pricescope@localhost:5435/pricescope
 ```
 
 Las variables deben ajustarse a la configuración implementada.
