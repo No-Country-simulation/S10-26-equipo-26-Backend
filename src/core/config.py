@@ -12,7 +12,7 @@ def normalize_database_url(url: str) -> str:
     }
     for prefix, replacement in prefixes.items():
         if url.startswith(prefix):
-            return replacement + url[len(prefix):]
+            return replacement + url[len(prefix) :]
     return url
 
 
@@ -29,7 +29,9 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     log_level: str = "INFO"
 
-    database_url: str = "postgresql+psycopg://pricescope:pricescope@localhost:5435/pricescope"
+    database_url: str = (
+        "postgresql+psycopg://pricescope:pricescope@localhost:5435/pricescope"
+    )
 
     @field_validator("database_url", mode="before")
     @classmethod

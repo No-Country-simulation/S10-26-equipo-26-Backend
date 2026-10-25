@@ -1,12 +1,15 @@
-"""initial schema
+"""initial schema (5 tablas en espanol — esquema de Railway Postgres)
 
 Revision ID: 0001
 Revises:
 Create Date: 2026-10-20
 
+NOTO: revision ya aplicada en Railway (alembic_version = 0001). En local se
+aplica contra el tunnel SSH (puerto 55432) o contra la BD Docker opcional.
 """
-from alembic import op
+
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0001"
 down_revision = None
@@ -16,180 +19,103 @@ depends_on = None
 
 def upgrade() -> None:
     op.create_table(
-        "products",
+        "categorias",
         sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("name", sa.String(length=255), nullable=False),
-        sa.Column("brand", sa.String(length=255), nullable=True),
-        sa.Column("category", sa.String(length=100), nullable=True),
-        sa.Column("reference_unit", sa.String(length=50), nullable=True),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.func.now(),
-            nullable=False,
-        ),
+        sa.Column("nombre", sa.String(length=100), nullable=False),
+        sa.UniqueConstraint("nombre", name="categorias_nombre_key"),
     )
 
     op.create_table(
-        "stores",
+        "tiendas",
         sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("name", sa.String(length=255), nullable=False),
-        sa.Column("base_url", sa.String(length=500), nullable=False),
-        sa.Column("country_code", sa.String(length=2), nullable=True),
-        sa.Column("currency_code", sa.String(length=3), nullable=True),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.func.now(),
-            nullable=False,
-        ),
+        sa.Column("nombre", sa.String(length=100), nullable=False),
+        sa.Column("url_base", sa.String(length=255), nullable=True),
+        sa.UniqueConstraint("nombre", name="tiendas_nombre_key"),
     )
 
     op.create_table(
-        "store_products",
+        "productos_canonicos",
         sa.Column("id", sa.Integer(), primary_key=True),
+        sa.Column("nombre_universal", sa.String(length=255), nullable=False),
         sa.Column(
-            "product_id",
+            "categoria_id",
             sa.Integer(),
-            sa.ForeignKey("products.id"),
-            nullable=False,
-        ),
-        sa.Column(
-            "store_id",
-            sa.Integer(),
-            sa.ForeignKey("stores.id"),
-            nullable=False,
-        ),
-        sa.Column("external_id", sa.String(length=255), nullable=False),
-        sa.Column("source_url", sa.String(length=1000), nullable=True),
-        sa.Column("source_name", sa.String(length=500), nullable=True),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.func.now(),
-            nullable=False,
-        ),
-        sa.UniqueConstraint(
-            "store_id",
-            "external_id",
-            name="uq_store_products_store_external",
-        ),
-    )
-    op.create_index(
-        "ix_store_products_product_id",
-        "store_products",
-        ["product_id"],
-    )
-    op.create_index(
-        "ix_store_products_store_id",
-        "store_products",
-        ["store_id"],
-    )
-
-    op.create_table(
-        "price_observations",
-        sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column(
-            "store_product_id",
-            sa.Integer(),
-            sa.ForeignKey("store_products.id"),
-            nullable=False,
-        ),
-        sa.Column("price", sa.Numeric(12, 2), nullable=False),
-        sa.Column("price_before", sa.Numeric(12, 2), nullable=True),
-        sa.Column("currency_code", sa.String(length=3), nullable=False),
-        sa.Column("is_promotion", sa.Boolean(), nullable=False),
-        sa.Column("is_available", sa.Boolean(), nullable=False),
-        sa.Column("observed_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("fetched_at", sa.DateTime(timezone=True), nullable=False),
-    )
-    op.create_index(
-        "ix_price_observations_store_product_id",
-        "price_observations",
-        ["store_product_id"],
-    )
-    op.create_index(
-        "ix_price_observations_observed_at",
-        "price_observations",
-        ["observed_at"],
-    )
-
-    op.create_table(
-        "exchange_rates",
-        sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("base_currency", sa.String(length=3), nullable=False),
-        sa.Column("quote_currency", sa.String(length=3), nullable=False),
-        sa.Column("rate", sa.Numeric(18, 6), nullable=False),
-        sa.Column("source", sa.String(length=100), nullable=True),
-        sa.Column("observed_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("fetched_at", sa.DateTime(timezone=True), nullable=False),
-    )
-    op.create_index(
-        "ix_exchange_rates_observed_pair",
-        "exchange_rates",
-        ["observed_at", "base_currency", "quote_currency"],
-    )
-
-    op.create_table(
-        "anomaly_alerts",
-        sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column(
-            "price_observation_id",
-            sa.Integer(),
-            sa.ForeignKey("price_observations.id"),
+            sa.ForeignKey("categorias.id"),
             nullable=True,
         ),
-        sa.Column("anomaly_type", sa.String(length=50), nullable=False),
-        sa.Column("severity", sa.String(length=20), nullable=False),
-        sa.Column("score", sa.Float(), nullable=True),
-        sa.Column("description", sa.Text(), nullable=True),
-        sa.Column("status", sa.String(length=20), nullable=False),
+        sa.Column("unidad_medida", sa.String(length=50), nullable=True),
+        sa.Column("marca", sa.Text(), nullable=True),
+    )
+
+    op.create_table(
+        "precios_historicos",
+        sa.Column("id", sa.BigInteger(), primary_key=True),
         sa.Column(
-            "created_at",
+            "timestamp",
             sa.DateTime(timezone=True),
             server_default=sa.func.now(),
             nullable=False,
         ),
+        sa.Column(
+            "producto_id",
+            sa.Integer(),
+            sa.ForeignKey("productos_canonicos.id"),
+            nullable=True,
+        ),
+        sa.Column(
+            "tienda_id",
+            sa.Integer(),
+            sa.ForeignKey("tiendas.id"),
+            nullable=True,
+        ),
+        sa.Column("precio_local", sa.Numeric(12, 2), nullable=False),
+        sa.Column("precio_tachado", sa.Numeric(12, 2), nullable=True),
+        sa.Column(
+            "en_oferta",
+            sa.Boolean(),
+            server_default=sa.false(),
+            nullable=True,
+        ),
+        sa.Column("tipo_cambio_usado", sa.Numeric(12, 4), nullable=False),
+        sa.Column("precio_usd", sa.Numeric(12, 2), nullable=False),
     )
     op.create_index(
-        "ix_anomaly_alerts_price_observation_id",
-        "anomaly_alerts",
-        ["price_observation_id"],
+        "idx_precios_prod_tiempo",
+        "precios_historicos",
+        ["producto_id", sa.text("timestamp DESC")],
+    )
+    op.create_index(
+        "idx_precios_tienda_tiempo",
+        "precios_historicos",
+        ["tienda_id", sa.text("timestamp DESC")],
+    )
+
+    op.create_table(
+        "historial_divisas",
+        sa.Column(
+            "timestamp",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            primary_key=True,
+        ),
+        sa.Column("tipo_cambio_oficial", sa.Numeric(12, 4), nullable=False),
+        sa.Column("tipo_cambio_paralelo", sa.Numeric(12, 4), nullable=False),
     )
 
 
 def downgrade() -> None:
-    op.drop_index(
-        "ix_anomaly_alerts_price_observation_id",
-        table_name="anomaly_alerts",
-    )
-    op.drop_table("anomaly_alerts")
+    op.drop_table("historial_divisas")
 
     op.drop_index(
-        "ix_exchange_rates_observed_pair",
-        table_name="exchange_rates",
+        "idx_precios_tienda_tiempo",
+        table_name="precios_historicos",
     )
-    op.drop_table("exchange_rates")
+    op.drop_index(
+        "idx_precios_prod_tiempo",
+        table_name="precios_historicos",
+    )
+    op.drop_table("precios_historicos")
 
-    op.drop_index(
-        "ix_price_observations_observed_at",
-        table_name="price_observations",
-    )
-    op.drop_index(
-        "ix_price_observations_store_product_id",
-        table_name="price_observations",
-    )
-    op.drop_table("price_observations")
-
-    op.drop_index(
-        "ix_store_products_store_id",
-        table_name="store_products",
-    )
-    op.drop_index(
-        "ix_store_products_product_id",
-        table_name="store_products",
-    )
-    op.drop_table("store_products")
-
-    op.drop_table("stores")
-    op.drop_table("products")
+    op.drop_table("productos_canonicos")
+    op.drop_table("tiendas")
+    op.drop_table("categorias")

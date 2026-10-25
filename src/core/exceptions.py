@@ -23,7 +23,9 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(ValidationError)
-    async def validation_handler(request: Request, exc: ValidationError) -> JSONResponse:
+    async def validation_handler(
+        request: Request, exc: ValidationError
+    ) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"detail": str(exc)},

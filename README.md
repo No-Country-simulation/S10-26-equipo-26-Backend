@@ -6,7 +6,7 @@ Este repositorio expone una API REST para consultar precios históricos, tipos d
 
 ## 1. Objetivo
 
-Implementar el backend de un MVP que permita: dsasaddsasad
+Implementar el backend de un MVP que permita:
 
 - Consultar productos, tiendas y precios históricos.
 - Calcular variaciones de precios y tipos de cambio.
@@ -24,9 +24,9 @@ El equipo enfrenta tres problemas técnicos centrales (detalle en `problematica.
 
 | Problema | Responsabilidad del Backend | Decisión clave |
 |---|---|---|
-| **1. Identidad de productos entre tiendas** | Modelo `products` (catálogo canónico) + `store_products` (puente por tienda con `external_id`, `source_url` y nombre crudo). Endpoints para gestionar y consultar el mapeo. | El matching es **curado manualmente** por el equipo; el Backend expone únicamente el mapeo validado. |
-| **2. Promociones, stock y reduflación** | `is_promotion` y `price_before` en `price_observations`; cálculo de precio regular vs promo; **exclusión de promos** del índice de inflación base; alerta (`anomaly_alerts`) cuando cambia la presentación/gramaje (`reference_unit`). | El índice de inflación base usa **solo precios regulares**. La mediana móvil es el método candidato. |
-| **3. Sincronización timestamp ↔ tipo de cambio** | Tabla `exchange_rates` con `observed_at`. El `price_usd` se calcula **en consulta/analytics** mediante un join con la cotización más cercana anterior al timestamp de la observación, **no** en la ingesta. | Se persiste el precio en moneda local + crudo; la conversión a USD es **una vista calculada**, no un dato almacenado. |
+| **1. Identidad de productos entre tiendas** | Catálogo `productos_canonicos` + catálogo `categorias`. El vínculo producto↔tienda hoy es la fila en `precios_historicos(producto_id, tienda_id)`. | El matching es **curado manualmente** por el equipo. La tabla `store_products` (con `external_id`/`source_url`) **no existe aún** en la BD: decisión #8 de `PLAN-AGIL.md` (HU 1.2/1.4 pospuestas). |
+| **2. Promociones, stock y reduflación** | `precio_tachado` y `en_oferta` en `precios_historicos`; clasificación promo vs regular **derivada en lectura** (sin columnas persistidas); **exclusión de ofertas** (`en_oferta = true`) del índice de inflación base. | El índice de inflación base usa **solo precios regulares**. La mediana móvil es el método candidato. Las alertas (reduflación, `anomaly_alerts`) están **pospuestas**: no existe la tabla (decisión #7). |
+| **3. Sincronización timestamp ↔ tipo de cambio** | Tabla `historial_divisas` (`timestamp` PK, oficial + paralelo en la misma fila). `precio_usd` y `tipo_cambio_usado` **se persisten** en `precios_historicos`, calculados por el pipeline Data en el momento de la captura. | La BD es **Railway Postgres** (proyecto `s10-26-equipo-26`); en local se conecta vía túnel SSH. |
 
 Flujo de datos y orden de dependencias:
 
@@ -134,57 +134,89 @@ Los endpoints no deben contener directamente consultas SQL ni implementar algori
 
 ## 5. Modelo de datos
 
-El esquema definitivo se debe acordar con el repositorio `data` antes de implementar la integración.
+> **✅ Fuente de verdad = Railway Postgres** (proyecto `s10-26-equipo-26`, servicio `Postgres`, base `railway`; migrado desde Supabase el 2026-10-25). El esquema tiene **5 tablas en español** y los modelos SQLAlchemy de `src/models/` están mapeados 1:1 con ellas (`compare_metadata` = 0 diferencias).
+>
+> ⚠️ **Host interno:** `postgres.railway.internal` solo es alcanzable desde Railway. Para desarrollo local, levantar el túnel SSH en una terminal:
+>
+> ```powershell
+> ssh -i $env:USERPROFILE\.ssh\id_ed25519_railway -o IdentitiesOnly=yes -N -L 55432:localhost:5432 railway-postgres
+> ```
+>
+> y usar `DATABASE_URL=postgresql+psycopg://postgres:<password>@localhost:55432/railway` (ver `.env.example`).
+>
+> ℹ️ La migración Alembic `0001` es la fuente del esquema: se aplica en el deploy (`alembic upgrade head` en el Procfile) y localmente vía túnel. La BD local Docker (`docker-compose up db`, puerto 5435) queda como alternativa offline.
 
-### `products`
+### `categorias`
 
-Catálogo de productos normalizados.
+Catálogo de categorías.
 
-Campos propuestos: `id`, `name`, `brand`, `category`, `reference_unit`, `created_at`.
+| Columna | Tipo | Restricción |
+|---|---|---|
+| `id` | integer | PK |
+| `nombre` | varchar(100) | NOT NULL, UNIQUE (`categorias_nombre_key`) |
 
-### `stores`
+### `tiendas`
 
 Catálogo de tiendas.
 
-Campos propuestos: `id`, `name`, `base_url`, `country_code`, `currency_code`.
+| Columna | Tipo | Restricción |
+|---|---|---|
+| `id` | integer | PK |
+| `nombre` | varchar(100) | NOT NULL, UNIQUE (`tiendas_nombre_key`) |
+| `url_base` | varchar(255) | nullable |
 
-### `store_products`
+### `productos_canonicos`
 
-Relación entre un producto canónico y su publicación en una tienda. Es el puente que resuelve el problema 1: un mismo producto puede tener nombres y códigos distintos en cada e-commerce.
+Catálogo de productos normalizados (el problema 1 se resuelve aquí como referencia canónica).
 
-Campos propuestos: `id`, `product_id`, `store_id`, `external_id`, `source_url`, `source_name` (nombre crudo publicado por la tienda).
+| Columna | Tipo | Restricción |
+|---|---|---|
+| `id` | integer | PK |
+| `nombre_universal` | varchar(255) | NOT NULL |
+| `categoria_id` | integer | FK → `categorias(id)`, nullable |
+| `unidad_medida` | varchar(50) | nullable (p. ej. `1 kg`, `500 G`, `unidad`) |
+| `marca` | text | nullable |
 
-Restricción recomendada: única por `(store_id, external_id)` para evitar duplicados de la misma publicación.
+### `precios_historicos`
 
-### `price_observations`
+Historial de precios observados: une producto y tienda directamente (no existe tabla intermedia).
 
-Historial de precios observados.
+| Columna | Tipo | Restricción |
+|---|---|---|
+| `id` | bigint | PK |
+| `timestamp` | timestamptz | NOT NULL, DEFAULT `now()` (momento de la captura) |
+| `producto_id` | integer | FK → `productos_canonicos(id)`, nullable |
+| `tienda_id` | integer | FK → `tiendas(id)`, nullable |
+| `precio_local` | numeric(12,2) | NOT NULL |
+| `precio_tachado` | numeric(12,2) | nullable (precio antes de la promo) |
+| `en_oferta` | boolean | DEFAULT `false` |
+| `tipo_cambio_usado` | numeric(12,4) | NOT NULL (FX aplicado en la captura) |
+| `precio_usd` | numeric(12,2) | NOT NULL (**persistido**, no es una vista) |
 
-Campos propuestos: `id`, `store_product_id`, `price`, `price_before` (precio tachado, nullable), `currency_code`, `is_promotion`, `is_available`, `observed_at`, `fetched_at`.
+Índices: `idx_precios_prod_tiempo (producto_id, timestamp DESC)` · `idx_precios_tienda_tiempo (tienda_id, timestamp DESC)`.
 
-Cada observación debe conservar su precio y moneda originales. Los nuevos precios deben generar nuevas observaciones, sin sobrescribir el historial.
+**Reglas:**
 
-**Reglas derivadas de la problemática:**
+- Cada lectura genera una fila nueva; nunca se sobrescribe el historial.
+- `precio_usd` y `tipo_cambio_usado` los calcula y persiste el **pipeline Data** en el momento de la captura; el backend solo los lee.
+- No existen columnas `currency_code`, `is_available`, `is_promotion` ni `price_regular`: la clasificación de promo se **deriva en lectura** desde `en_oferta` + `precio_tachado`.
 
-- `observed_at` es el momento al que corresponde el precio (captura); `fetched_at` es el momento en que el sistema lo obtuvo.
-- El precio convertido a USD **no se persiste aquí**: se calcula en tiempo de consulta con la cotización vigente en `observed_at` (join as-of sobre `exchange_rates`).
-- `is_promotion` y `price_before` alimentan la exclusión de promos del índice de inflación base.
+### `historial_divisas`
 
-### `exchange_rates`
+Historial de tipos de cambio: una fila por instante con ambas cotizaciones.
 
-Historial de tipos de cambio.
+| Columna | Tipo | Restricción |
+|---|---|---|
+| `timestamp` | timestamptz | **PK**, DEFAULT `now()` |
+| `tipo_cambio_oficial` | numeric(12,4) | NOT NULL |
+| `tipo_cambio_paralelo` | numeric(12,4) | NOT NULL |
 
-Campos propuestos: `id`, `base_currency`, `quote_currency`, `rate`, `observed_at`, `fetched_at`.
+Sin `id`, sin `base_currency`/`quote_currency` y sin `source`. El "FX as of" se resuelve con `WHERE timestamp <= :ts ORDER BY timestamp DESC LIMIT 1` (la PK ya indexa `timestamp`); el upsert es por `timestamp`.
 
-### `anomaly_alerts`
+### Tablas **no existentes** (pospuestas)
 
-Registro de posibles anomalías y alertas de negocio.
-
-Campos propuestos: `id`, `price_observation_id`, `anomaly_type`, `severity`, `score`, `description`, `created_at`, `status`.
-
-`anomaly_type` debe contemplar al menos: `spike` (pico de precio), `shrinkflation` (cambio de presentación/gramaje) y `outpace_devaluation` (el producto aumentó más que la devaluación en el período).
-
-Los campos y restricciones definitivos deben reflejar las necesidades reales del MVP. Las migraciones de esquema deben gestionarse desde este repositorio.
+- `store_products` — requeriría cambio de BD (decisión #8; bloquea HU 1.2 y HU 1.4).
+- `anomaly_alerts` — requeriría cambio de BD (decisión #7; bloquea HU 2.4 y HU 3.5).
 
 ## 6. API REST
 
@@ -301,27 +333,25 @@ El repositorio `data` se encarga de recolectar y validar observaciones. El backe
 
 Antes de implementar la integración, ambos repositorios deben acordar un único contrato de observación.
 
-Cada registro debería contener como mínimo:
+Cada registro de precio debería contener como mínimo (para mapear a `precios_historicos`):
 
-- Fuente o tienda.
-- Identificador de la publicación (`external_id`), cuando exista.
-- Nombre del producto tal como lo publica la tienda (nombre crudo).
-- Marca y categoría cuando estén disponibles.
-- Precio actual (`price`).
-- Precio tachado o anterior (`price_before`) cuando exista.
-- Código de moneda.
-- Disponibilidad (`is_available`).
-- Señales de promoción (badge, `2x1`, etc.).
-- Presentación/gramaje crudo, si la tienda lo expone (base para detectar reduflación).
-- URL de origen.
-- `observed_at`.
-- `fetched_at`.
+- Tienda (`tiendas.nombre`, ya sembrada: Carrefour, Cetrogar, Coto).
+- Producto canónico (`productos_canonicos.id`), tras el mapeo curado.
+- Precio actual (`precio_local`).
+- Precio tachado o anterior (`precio_tachado`) cuando exista.
+- Señal de oferta (`en_oferta`; badge, `2x1`, etc.).
+- Momento de la captura (`timestamp`).
+- Presentación/gramaje crudo, si la tienda lo expone (aún **sin columna de persistencia**: base futura de reduflación, decisión #7).
 
-Reglas de integración derivadas de la problemática:
+Y para el job FX (para mapear a `historial_divisas`):
 
-- El pipeline **no** debe convertir precios a USD; entrega siempre moneda local cruda.
-- El Backend es el responsable del esquema, las migraciones y la conversión a USD en consulta.
-- El mapeo `store_products → products` es la fuente única de identidad canónica; el pipeline solo aporta los datos crudos para construirlo.
+- `timestamp`, `tipo_cambio_oficial` y `tipo_cambio_paralelo`.
+
+Reglas de integración:
+
+- El pipeline **calcula y persiste** `precio_usd` y `tipo_cambio_usado` en la misma fila de `precios_historicos`, usando el FX vigente en el `timestamp` de la captura (no un FX futuro).
+- **La BD (Railway) es del equipo**: las migraciones de esquema viven en este repo y se aplican en el deploy o localmente vía túnel, coordinadas con el equipo.
+- La identidad canónica es `productos_canonicos`; mientras no exista `store_products` (decisión #8), el scraping no persiste `external_id`/`source_url` en esta BD.
 
 ### Estrategia recomendada para el MVP
 
@@ -387,10 +417,25 @@ Instalar dependencias:
 pip install -r requirements.txt
 ```
 
-Configurar `.env`, crear la base de datos y ejecutar las migraciones:
+Configurar `.env` (apunta a Railway vía túnel), levantar el túnel SSH y ejecutar las migraciones:
+
+```powershell
+# Terminal 1 — túnel a Railway Postgres (mantener abierto)
+ssh -i $env:USERPROFILE\.ssh\id_ed25519_railway -o IdentitiesOnly=yes -N -L 55432:localhost:5432 railway-postgres
+```
 
 ```bash
 alembic upgrade head
+```
+
+> ⚠️ El `DATABASE_URL` local apunta a **localhost:55432 (túnel a Railway Postgres)** — sin túnel, nada conecta. El túnel usa la clave `~/.ssh/id_ed25519_railway` (registrada en Railway como `opencode-automation`).
+>
+> ℹ️ Sin red, usa la BD local Docker: `docker-compose up db` (puerto 5435) y la URL alternativa del `.env.example`.
+
+Seed (idempotente; el catálogo de 3 tiendas / 5 categorías / 15 productos ya está en Railway):
+
+```bash
+python scripts/seed.py
 ```
 
 Iniciar el servidor:
@@ -400,6 +445,21 @@ uvicorn src.main:app --reload
 ```
 
 El comando de inicio depende de la ruta de importación definitiva del proyecto.
+
+### Backup de la base de datos
+
+`scripts/backup_db.py` genera un `.sql` restaurable (DDL + datos `COPY` + secuencias) de la BD indicada en `DATABASE_URL`:
+
+```bash
+python scripts/backup_db.py                      # → backups/pricescope_backup_<fecha>.sql
+python scripts/backup_db.py --out backups/mi.sql
+```
+
+- **Solo lectura garantizada:** corre en una transacción `REPEATABLE READ READ ONLY` (el servidor rechaza cualquier escritura) y verifica `SHOW transaction_read_only = on`.
+- Snapshot consistente: todas las tablas del mismo instante.
+- Restore probado: `psql -U <user> -d <db> -f backups/<archivo>.sql`.
+- La carpeta `backups/` está en `.gitignore` (no commitear volcados de BD).
+- Requiere el túnel SSH activo (usa el `DATABASE_URL` del `.env`); por ejemplo para regenerar el backup contra Railway.
 
 ### Documentación interactiva
 
@@ -485,12 +545,13 @@ Antes de ampliar el alcance, confirmar:
 
 1. Versión definitiva de Python y dependencias.
 2. Contrato de datos con el repositorio `data`.
-3. Esquema final de PostgreSQL.
+3. ~~Esquema final de PostgreSQL~~ **✅ Resuelto: Railway Postgres, 5 tablas en español (migrado desde Supabase 2026-10-25).**
 4. Endpoints y formatos de respuesta acordados con frontend.
-5. Fuente y convención de los tipos de cambio.
+5. Fuente y convención de los tipos de cambio (debe entregar oficial + paralelo).
 6. Método y umbrales iniciales de detección.
 7. Disponibilidad y calidad del historial.
 8. Ejecución de tareas periódicas.
 9. Configuración de despliegue y demostración.
+10. Cambios de BD pendientes: tabla `store_products` (#8) y `anomaly_alerts` (#7) — a plantear al equipo técnico (ver `PLAN-AGIL.md`).
 
 La prioridad es completar un flujo end-to-end pequeño y confiable. Toda funcionalidad adicional debe justificarse por su contribución a la demo o por una necesidad concreta del MVP.
