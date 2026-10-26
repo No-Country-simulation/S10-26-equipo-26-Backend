@@ -5,7 +5,6 @@ Backend de PriceScope, una plataforma B2B de monitoreo de precios e inflación r
 Este repositorio expone una API REST para consultar precios históricos, tipos de cambio, indicadores de variación y alertas de posibles anomalías. También contiene la lógica de negocio y el componente analítico encargado de identificar movimientos inusuales en los precios.
 
 ## 1. Objetivo
-
 Implementar el backend de un MVP que permita:
 
 - Consultar productos, tiendas y precios históricos.
