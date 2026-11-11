@@ -8,7 +8,13 @@ from src.schemas.anomaly_alert import (
 from src.schemas.categoria import CategoriaRead
 from src.schemas.health import HealthResponse
 from src.schemas.historial_divisa import HistorialDivisaList, HistorialDivisaRead
-from src.schemas.indicators import InflationPointRead, InflationSeriesRead
+from src.schemas.indicators import (
+    DevaluationGapRead,
+    InflationPointRead,
+    InflationSeriesRead,
+    SpikeListRead,
+    SpikeRead,
+)
 from src.schemas.matching import (
     MatchSuggestionList,
     MatchSuggestionRead,
@@ -35,6 +41,7 @@ __all__ = [
     "AnomalyAlertPatch",
     "AnomalyAlertRead",
     "CategoriaRead",
+    "DevaluationGapRead",
     "HealthResponse",
     "HistorialDivisaList",
     "HistorialDivisaRead",
@@ -50,6 +57,8 @@ __all__ = [
     "ProductoCanonicoList",
     "ProductoCanonicoRead",
     "ProductoCanonicoUpdate",
+    "SpikeListRead",
+    "SpikeRead",
     "StoreProductCreate",
     "StoreProductRead",
     "TiendaRead",

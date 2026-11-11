@@ -75,7 +75,14 @@ def compute_inflation(
     start: date | None = None,
     end: date | None = None,
     window_days: int = DEFAULT_WINDOW_DAYS,
+    currency: str = "local",
 ) -> InflationResult:
+    """Serie de indice. `currency='local'` usa precio_local; `'usd'` usa
+    precio_usd persistido (HU 3.3). La clasificacion promo siempre se
+    evalua sobre el precio local (badge/tachado)."""
+    if currency not in ("local", "usd"):
+        raise ValueError("currency debe ser 'local' o 'usd'")
+
     stmt = select(PrecioHistorico, ProductoCanonico).join(
         ProductoCanonico,
         PrecioHistorico.producto_id == ProductoCanonico.id,
@@ -101,6 +108,9 @@ def compute_inflation(
     por_producto: dict[int | None, dict[date, list[Decimal]]] = defaultdict(
         lambda: defaultdict(list),
     )
+    # valor en la moneda pedida (seleccionado arriba en la query como fila
+    # completa; aqui se elige el campo concreto)
+    campo = "precio_usd" if currency == "usd" else "precio_local"
 
     for precio_row, _producto in rows:
         if precio_row.en_oferta:
@@ -114,8 +124,11 @@ def compute_inflation(
         if clasificacion.is_promotion:
             excluded_promos += 1
             continue
+        valor = getattr(precio_row, campo)
+        if valor is None or valor == 0:
+            continue
         dia = precio_row.timestamp.date()
-        por_producto[precio_row.producto_id][dia].append(precio_row.precio_local)
+        por_producto[precio_row.producto_id][dia].append(valor)
 
     if not por_producto:
         return InflationResult(

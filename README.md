@@ -327,6 +327,29 @@ Parámetros: `category_id`, `start_date`, `end_date` (YYYY-MM-DD), `window_days`
 
 El índice debe presentarse como un indicador experimental de la canasta analizada, no como una medición oficial de la inflación nacional.
 
+### Variación de precios vs devaluación (`GET /api/v1/indicators/devaluation-gap`)
+
+Parámetros: `start_date`, `end_date` (requeridos), `category_id`, `window_days`.
+
+- `price_variation = Índice(final) / Índice(inicial) − 1` (índice de la sección anterior, precios regulares).
+- `fx_variation = (FX_fin − FX_ini) / FX_ini` con la cotización **oficial** *as-of* `start_date` 00:00 y `end_date` 23:59 (HU 3.2).
+- `gap = price_variation − fx_variation` → **positivo** significa que los precios superaron a la devaluación.
+- Sin ≥ 2 puntos de precio o sin cotizaciones → `404`. `start > end` → `400`.
+
+El índice admite `currency=local | usd` (`GET /indicators/inflation`): en `usd` se usa el `precio_usd` persistido en `precios_historicos` (calculado por el pipeline Data en el momento de la captura).
+
+### Detección de picos (`GET /api/v1/indicators/spikes`)
+
+Mediana móvil + MAD (median absolute deviation), ventana `window` (default 5, se evalúa desde el punto `window`):
+
+```
+umbral = k × MAD × 1.4826          # 1.4826 => sigma bajo normalidad
+pico   si |x − mediana_ventana| > umbral
+MAD = 0  =>  pico si x ≠ mediana (desvío exacto)
+```
+
+Parámetros: `producto_id` (requerido), `start_date`, `end_date`, `window` (2–90), `k` (> 0, default 3), `currency`. El valor por día es la mediana de las observaciones de ese día.
+
 ## 8. Detección de anomalías
 
 El módulo de detección es una de las responsabilidades centrales del backend.
