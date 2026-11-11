@@ -8,6 +8,7 @@ from src.schemas.anomaly_alert import (
 from src.schemas.categoria import CategoriaRead
 from src.schemas.health import HealthResponse
 from src.schemas.historial_divisa import HistorialDivisaList, HistorialDivisaRead
+from src.schemas.indicators import InflationPointRead, InflationSeriesRead
 from src.schemas.precio_historico import (
     PrecioHistoricoRead,
     PriceHistoryList,
@@ -32,6 +33,8 @@ __all__ = [
     "HealthResponse",
     "HistorialDivisaList",
     "HistorialDivisaRead",
+    "InflationPointRead",
+    "InflationSeriesRead",
     "PrecioHistoricoRead",
     "PriceHistoryList",
     "PricePoint",

@@ -282,16 +282,17 @@ P_{\mathrm{USD}}=\frac{P_{\mathrm{CLP}}}{FX_{\mathrm{CLP/USD}}}
 
 La conversión debe utilizar una tasa válida para el momento de la observación. No se deben usar tasas futuras para recalcular el pasado.
 
-### Índice de precios
+### Índice de precios (implementado — `GET /api/v1/indicators/inflation`)
 
-Para el MVP se puede construir un índice simple sobre una canasta fija de productos. La metodología debe especificar:
+Metodología efectiva del MVP (decisión #4):
 
-- Período base.
-- Productos incluidos.
-- Método de agregación.
-- Tratamiento de promociones.
-- Ponderaciones, si existen.
-- Tratamiento de datos faltantes.
+1. **Exclusión de promos**: se descartan las observaciones con `en_oferta = true` **o** clasificadas como promo por `promo_classifier` (precio tachado con descuento ≥ 10%). El campo `excluded_promos` de la respuesta reporta cuántas se excluyeron.
+2. **Mediana móvil por producto**: por día con precios regulares se toma la mediana del día; luego la mediana móvil de los últimos **7 días** (`window_days`, configurable 1–90).
+3. **Ratio por producto**: `R_p(t) = mediana_p(t) / mediana_p(t0)`, donde `t0` es la primera fecha con datos dentro del rango consultado (índice base 100 en `t0`).
+4. **Agregación**: `índice(t) = 100 × media de R_p(t)` sobre los productos con mediana en `t`. Con `category_id` la media se limita a esa categoría; sin filtro, índice global de la canasta.
+5. **Datos faltantes**: los días sin precio regular no generan punto; la ventana mira hacia atrás hasta 7 días con datos.
+
+Parámetros: `category_id`, `start_date`, `end_date` (YYYY-MM-DD), `window_days`.
 
 El índice debe presentarse como un indicador experimental de la canasta analizada, no como una medición oficial de la inflación nacional.
 
