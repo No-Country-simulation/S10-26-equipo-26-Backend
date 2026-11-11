@@ -7,8 +7,12 @@ from src.schemas.anomaly_alert import (
 )
 from src.schemas.categoria import CategoriaRead
 from src.schemas.health import HealthResponse
-from src.schemas.historial_divisa import HistorialDivisaRead
-from src.schemas.precio_historico import PrecioHistoricoRead
+from src.schemas.historial_divisa import HistorialDivisaList, HistorialDivisaRead
+from src.schemas.precio_historico import (
+    PrecioHistoricoRead,
+    PriceHistoryList,
+    PricePoint,
+)
 from src.schemas.producto_canonico import (
     ProductoCanonicoCreate,
     ProductoCanonicoList,
@@ -26,8 +30,11 @@ __all__ = [
     "AnomalyAlertRead",
     "CategoriaRead",
     "HealthResponse",
+    "HistorialDivisaList",
     "HistorialDivisaRead",
     "PrecioHistoricoRead",
+    "PriceHistoryList",
+    "PricePoint",
     "ProductoCanonicoCreate",
     "ProductoCanonicoList",
     "ProductoCanonicoRead",

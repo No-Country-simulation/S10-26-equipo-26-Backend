@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class HistorialDivisaRead(BaseModel):
@@ -10,6 +10,18 @@ class HistorialDivisaRead(BaseModel):
     timestamp: datetime
     tipo_cambio_oficial: Decimal
     tipo_cambio_paralelo: Decimal
+
+    @field_validator("timestamp", mode="after")
+    @classmethod
+    def _to_utc(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
+
+
+class HistorialDivisaList(BaseModel):
+    items: list[HistorialDivisaRead]
+    total: int
 
 
 class HistorialDivisaCreate(BaseModel):
