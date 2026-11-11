@@ -7,7 +7,7 @@ class StoreProductRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    producto_id: int
+    producto_id: int | None = None
     tienda_id: int
     external_id: str
     source_url: str | None = None
@@ -18,7 +18,7 @@ class StoreProductRead(BaseModel):
 
 
 class StoreProductCreate(BaseModel):
-    producto_id: int = Field(ge=1)
+    producto_id: int | None = Field(default=None, ge=1)
     tienda_id: int = Field(ge=1)
     external_id: str = Field(min_length=1, max_length=255)
     source_url: str | None = None

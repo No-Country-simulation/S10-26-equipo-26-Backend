@@ -25,7 +25,7 @@ def upgrade() -> None:
             "producto_id",
             sa.Integer(),
             sa.ForeignKey("productos_canonicos.id"),
-            nullable=False,
+            nullable=True,
         ),
         sa.Column(
             "tienda_id",

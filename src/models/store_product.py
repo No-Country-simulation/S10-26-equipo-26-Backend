@@ -19,9 +19,9 @@ class StoreProduct(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    producto_id: Mapped[int] = mapped_column(
+    # NULL = fila scrapeada sin matchear aun (HU 1.4 asiste el mapeo)
+    producto_id: Mapped[int | None] = mapped_column(
         ForeignKey("productos_canonicos.id"),
-        nullable=False,
     )
     tienda_id: Mapped[int] = mapped_column(
         ForeignKey("tiendas.id"),
