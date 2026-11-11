@@ -16,8 +16,8 @@ def test_list_stores(api_client, db_session) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert [t["nombre"] for t in body] == ["Carrefour", "Coto"]
-    assert body[0]["url_base"] == "https://www.carrefour.com.ar/"
+    assert [t["nombre"] for t in body] == ["Coto", "Carrefour"]  # orden por id
+    assert body[0]["url_base"] == "https://www.coto.com.ar/"
     assert all(isinstance(t["id"], int) for t in body)
 
 
