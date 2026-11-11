@@ -54,11 +54,12 @@ def _daily_median(precios: list[Decimal]) -> Decimal:
     return Decimal(str(median(precios)))
 
 
-def _window_median(
+def window_median(
     daily: dict[date, Decimal],
     day: date,
     window_days: int,
 ) -> Decimal | None:
+    """Mediana de los valores diarios en [day - window_days + 1, day]."""
     valores = [
         daily[day - timedelta(days=offset)]
         for offset in range(window_days)
@@ -69,17 +70,18 @@ def _window_median(
     return Decimal(str(median(valores)))
 
 
-def compute_inflation(
+def daily_regular_prices(
     db: Session,
     category_id: int | None = None,
     start: date | None = None,
     end: date | None = None,
-    window_days: int = DEFAULT_WINDOW_DAYS,
     currency: str = "local",
-) -> InflationResult:
-    """Serie de indice. `currency='local'` usa precio_local; `'usd'` usa
-    precio_usd persistido (HU 3.3). La clasificacion promo siempre se
-    evalua sobre el precio local (badge/tachado)."""
+) -> tuple[dict[int | None, dict[date, Decimal]], int]:
+    """Precios regulares por producto y dia (mediana del dia).
+
+    Devuelve (mapa producto_id -> {fecha: mediana}, excluidas_promo).
+    Reutilizado por el indice de inflacion y por el motor de alertas.
+    """
     if currency not in ("local", "usd"):
         raise ValueError("currency debe ser 'local' o 'usd'")
 
@@ -96,7 +98,6 @@ def compute_inflation(
             >= datetime.combine(start, time.min, tzinfo=UTC),
         )
     if end is not None:
-        # incluye todo el dia final
         stmt = stmt.where(
             PrecioHistorico.timestamp
             < datetime.combine(end + timedelta(days=1), time.min, tzinfo=UTC),
@@ -105,11 +106,9 @@ def compute_inflation(
     rows = db.execute(stmt).all()
 
     excluded_promos = 0
-    por_producto: dict[int | None, dict[date, list[Decimal]]] = defaultdict(
+    bruto: dict[int | None, dict[date, list[Decimal]]] = defaultdict(
         lambda: defaultdict(list),
     )
-    # valor en la moneda pedida (seleccionado arriba en la query como fila
-    # completa; aqui se elige el campo concreto)
     campo = "precio_usd" if currency == "usd" else "precio_local"
 
     for precio_row, _producto in rows:
@@ -128,9 +127,38 @@ def compute_inflation(
         if valor is None or valor == 0:
             continue
         dia = precio_row.timestamp.date()
-        por_producto[precio_row.producto_id][dia].append(valor)
+        bruto[precio_row.producto_id][dia].append(valor)
 
-    if not por_producto:
+    daily_por_producto: dict[int | None, dict[date, Decimal]] = {
+        producto_id: {
+            dia: _daily_median(valores)
+            for dia, valores in dias.items()
+        }
+        for producto_id, dias in bruto.items()
+    }
+    return daily_por_producto, excluded_promos
+
+
+def compute_inflation(
+    db: Session,
+    category_id: int | None = None,
+    start: date | None = None,
+    end: date | None = None,
+    window_days: int = DEFAULT_WINDOW_DAYS,
+    currency: str = "local",
+) -> InflationResult:
+    """Serie de indice. `currency='local'` usa precio_local; `'usd'` usa
+    precio_usd persistido (HU 3.3). La clasificacion promo siempre se
+    evalua sobre el precio local (badge/tachado)."""
+    daily_por_producto, excluded_promos = daily_regular_prices(
+        db,
+        category_id=category_id,
+        start=start,
+        end=end,
+        currency=currency,
+    )
+
+    if not daily_por_producto:
         return InflationResult(
             series=[],
             base=BASE_INDEX,
@@ -139,25 +167,9 @@ def compute_inflation(
             products_count=0,
         )
 
-    daily_por_producto: dict[int | None, dict[date, Decimal]] = {
-        producto_id: {
-            dia: _daily_median(valores)
-            for dia, valores in dias.items()
-        }
-        for producto_id, dias in por_producto.items()
-    }
-
     todas_fechas = sorted(
         {dia for dias in daily_por_producto.values() for dia in dias}
     )
-    if not todas_fechas:
-        return InflationResult(
-            series=[],
-            base=BASE_INDEX,
-            method=METHOD_DESCRIPTION,
-            excluded_promos=excluded_promos,
-            products_count=len(daily_por_producto),
-        )
 
     medias_por_producto: dict[int | None, dict[date, Decimal]] = {}
 
@@ -165,7 +177,7 @@ def compute_inflation(
         ratios: dict[date, Decimal] = {}
         base: Decimal | None = None
         for dia in todas_fechas:
-            valor = _window_median(daily, dia, window_days)
+            valor = window_median(daily, dia, window_days)
             if valor is None or valor == 0:
                 continue
             if base is None:
@@ -187,7 +199,10 @@ def compute_inflation(
         total = sum(valores, Decimal(0))
         promedio = total / len(valores)
         series.append(
-            InflationPoint(date=dia, index=(BASE_INDEX * promedio).quantize(Decimal("0.01"))),
+            InflationPoint(
+                date=dia,
+                index=(BASE_INDEX * promedio).quantize(Decimal("0.01")),
+            ),
         )
 
     return InflationResult(

@@ -18,8 +18,6 @@ from src.analytics.inflation import compute_inflation
 from src.core.exceptions import NotFoundError, ValidationError
 from src.services.fx_service import get_rate_as_of
 
-ZERO = Decimal(0)
-
 
 @dataclass(frozen=True)
 class DevaluationGap:
@@ -30,6 +28,27 @@ class DevaluationGap:
     gap: Decimal
     fx_start: Decimal
     fx_end: Decimal
+
+
+def fx_variation(
+    db: Session,
+    start: date,
+    end: date,
+) -> tuple[Decimal, Decimal, Decimal]:
+    """(fx_start, fx_end, variacion) con la cotizacion oficial as-of."""
+    fx_ini = get_rate_as_of(
+        db,
+        datetime.combine(start, time.min, tzinfo=UTC),
+    ).tipo_cambio_oficial
+    fx_fin = get_rate_as_of(
+        db,
+        datetime.combine(end, time.max, tzinfo=UTC),
+    ).tipo_cambio_oficial
+
+    if fx_ini == 0:
+        raise NotFoundError("tipo de cambio inicial invalido")
+    variacion = ((fx_fin - fx_ini) / fx_ini).quantize(Decimal("0.0001"))
+    return fx_ini, fx_fin, variacion
 
 
 def compute_devaluation_gap(
@@ -56,27 +75,16 @@ def compute_devaluation_gap(
     ultimo = inflacion.series[-1].index
     if primero == 0:
         raise NotFoundError("indice base invalido")
-    price_variation = (ultimo - primero) / primero
+    price_variation = ((ultimo - primero) / primero).quantize(Decimal("0.0001"))
 
-    fx_ini = get_rate_as_of(
-        db,
-        datetime.combine(start, time.min, tzinfo=UTC),
-    ).tipo_cambio_oficial
-    fx_fin = get_rate_as_of(
-        db,
-        datetime.combine(end, time.max, tzinfo=UTC),
-    ).tipo_cambio_oficial
-
-    if fx_ini == 0:
-        raise NotFoundError("tipo de cambio inicial invalido")
-    fx_variation = (fx_fin - fx_ini) / fx_ini
+    fx_ini, fx_fin, fx_variation_value = fx_variation(db, start, end)
 
     return DevaluationGap(
         start=start,
         end=end,
-        price_variation=price_variation.quantize(Decimal("0.0001")),
-        fx_variation=fx_variation.quantize(Decimal("0.0001")),
-        gap=(price_variation - fx_variation).quantize(Decimal("0.0001")),
+        price_variation=price_variation,
+        fx_variation=fx_variation_value,
+        gap=(price_variation - fx_variation_value).quantize(Decimal("0.0001")),
         fx_start=fx_ini,
         fx_end=fx_fin,
     )
