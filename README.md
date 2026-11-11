@@ -256,6 +256,37 @@ Según el endpoint, se podrán utilizar:
 - Evitar exponer detalles internos o credenciales en los errores.
 - Documentar los contratos mediante OpenAPI.
 
+### Mapeo producto ↔ tienda (HU 1.2 / HU 1.4)
+
+**Endpoints:**
+
+- `POST /api/v1/store-products` — crea la fila cruda de cada e-commerce
+  (`external_id`, `nombre_crudo`, `source_url`…). `producto_id` es `NULL`
+  mientras no se matchee. Duplicado `(tienda_id, external_id)` → `409`.
+- `GET /api/v1/store-products?tienda_id=&producto_id=&unmatched_only=`
+- `POST /api/v1/match/suggestions` con `{tienda_id, threshold=0.75}` —
+  devuelve el mejor producto canónico por `store_product` con `score` 0..1.
+
+**Bandas de score** (normalización en paridad con `src/normalizers/strings.py`
+del repo Data: minúsculas, sin tildes, sin puntuación, token sort):
+
+| score | banda | acción esperada |
+|---|---|---|
+| ≥ 0.90 | `auto` | el analista confirma en bloque |
+| 0.75 – 0.90 | `review` | revisión manual, caso por caso |
+| < 0.75 | (no se sugiere) | queda `unmatched_only=true` |
+
+**Flujo humano de aceptación** (regla de negocio MVP: el mapeo lo cura un humano):
+
+1. El pipeline Data ingesta productos crudos → `POST /store-products` (sin `producto_id`).
+2. El analista llama `POST /match/suggestions` por tienda.
+3. Confirma las de banda `auto` y revisa una a una las de `review`.
+4. La aceptación se materializa asignando `store_products.producto_id`
+   (asignación individual aún sin endpoint dedicado: por ahora vía SQL o
+   futura `PATCH /store-products/{id}`).
+5. Las filas sin match siguen listándose con `unmatched_only=true` para la
+   siguiente tanda.
+
 ## 7. Indicadores de precios y tipos de cambio
 
 ### Variación porcentual del precio

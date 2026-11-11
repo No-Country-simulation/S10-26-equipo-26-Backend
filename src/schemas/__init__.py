@@ -9,6 +9,11 @@ from src.schemas.categoria import CategoriaRead
 from src.schemas.health import HealthResponse
 from src.schemas.historial_divisa import HistorialDivisaList, HistorialDivisaRead
 from src.schemas.indicators import InflationPointRead, InflationSeriesRead
+from src.schemas.matching import (
+    MatchSuggestionList,
+    MatchSuggestionRead,
+    MatchSuggestionRequest,
+)
 from src.schemas.precio_historico import (
     PrecioHistoricoRead,
     PriceHistoryList,
@@ -35,6 +40,9 @@ __all__ = [
     "HistorialDivisaRead",
     "InflationPointRead",
     "InflationSeriesRead",
+    "MatchSuggestionList",
+    "MatchSuggestionRead",
+    "MatchSuggestionRequest",
     "PrecioHistoricoRead",
     "PriceHistoryList",
     "PricePoint",

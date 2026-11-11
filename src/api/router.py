@@ -5,6 +5,7 @@ from src.api.v1 import (
     exchange_rates,
     health,
     indicators,
+    match,
     prices,
     products,
     store_products,
@@ -31,3 +32,4 @@ api_router.include_router(
     prefix="/store-products",
     tags=["store-products"],
 )
+api_router.include_router(match.router, prefix="/match", tags=["match"])
