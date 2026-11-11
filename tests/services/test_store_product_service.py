@@ -6,7 +6,7 @@ from src.core.exceptions import ConflictError, NotFoundError, ValidationError
 from src.models.categoria import Categoria
 from src.models.producto_canonico import ProductoCanonico
 from src.models.tienda import Tienda
-from src.schemas.store_product import StoreProductCreate
+from src.schemas.store_product import StoreProductCreate, StoreProductUpdate
 from src.services import store_product_service
 
 
@@ -182,3 +182,57 @@ def test_list_filtros(db_session, catalogo) -> None:
         unmatched_only=True,
     )
     assert [s.id for s in pendientes] == [sin_match.id, en_otra_tienda.id]
+
+
+def test_update_asigna_producto(db_session, catalogo) -> None:
+    sp = store_product_service.create_store_product(
+        db_session,
+        StoreProductCreate(
+            tienda_id=catalogo["tienda"].id,
+            external_id="EXT-MATCH",
+            nombre_crudo="COCA COLA 2 LT",
+        ),
+    )
+    assert sp.producto_id is None
+
+    vinculado = store_product_service.update_store_product(
+        db_session,
+        sp.id,
+        StoreProductUpdate(producto_id=catalogo["producto"].id),
+    )
+
+    assert vinculado.producto_id == catalogo["producto"].id
+
+    desvinculado = store_product_service.update_store_product(
+        db_session,
+        sp.id,
+        StoreProductUpdate(producto_id=None),
+    )
+    assert desvinculado.producto_id is None
+
+
+def test_update_con_producto_inexistente_rechazado(db_session, catalogo) -> None:
+    sp = store_product_service.create_store_product(
+        db_session,
+        StoreProductCreate(
+            tienda_id=catalogo["tienda"].id,
+            external_id="EXT-MATCH-2",
+            nombre_crudo="X",
+        ),
+    )
+
+    with pytest.raises(ValidationError, match="producto_id"):
+        store_product_service.update_store_product(
+            db_session,
+            sp.id,
+            StoreProductUpdate(producto_id=9999),
+        )
+
+
+def test_update_inexistente_lanza_404(db_session) -> None:
+    with pytest.raises(NotFoundError):
+        store_product_service.update_store_product(
+            db_session,
+            99999,
+            StoreProductUpdate(producto_id=None),
+        )

@@ -6,7 +6,7 @@ from src.core.exceptions import ConflictError, NotFoundError, ValidationError
 from src.models.producto_canonico import ProductoCanonico
 from src.models.store_product import StoreProduct
 from src.models.tienda import Tienda
-from src.schemas.store_product import StoreProductCreate
+from src.schemas.store_product import StoreProductCreate, StoreProductUpdate
 
 
 def _validar_fk(db: Session, payload: StoreProductCreate) -> None:
@@ -43,6 +43,31 @@ def get_store_product(db: Session, store_product_id: int) -> StoreProduct:
     store_product = db.get(StoreProduct, store_product_id)
     if store_product is None:
         raise NotFoundError(f"store_product {store_product_id} no encontrado")
+    return store_product
+
+
+def update_store_product(
+    db: Session,
+    store_product_id: int,
+    payload: StoreProductUpdate,
+) -> StoreProduct:
+    """Asigna (o desvincula con null) el producto canonico — HU 1.4 paso 4."""
+    store_product = get_store_product(db, store_product_id)
+
+    if payload.producto_id is not None:
+        _validar_fk(
+            db,
+            StoreProductCreate(
+                producto_id=payload.producto_id,
+                tienda_id=store_product.tienda_id,
+                external_id=store_product.external_id,
+                nombre_crudo=store_product.nombre_crudo,
+            ),
+        )
+
+    store_product.producto_id = payload.producto_id
+    db.commit()
+    db.refresh(store_product)
     return store_product
 
 

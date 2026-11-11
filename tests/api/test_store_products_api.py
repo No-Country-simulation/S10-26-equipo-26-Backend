@@ -142,3 +142,77 @@ def test_get_por_id(api_client, tienda) -> None:
 
     no_existe = api_client.get("/api/v1/store-products/99999")
     assert no_existe.status_code == 404
+
+
+def test_patch_asigna_producto(api_client, tienda, db_session) -> None:
+    from src.models.producto_canonico import ProductoCanonico
+
+    producto = ProductoCanonico(nombre_universal="Coca Cola 2L")
+    db_session.add(producto)
+    db_session.commit()
+
+    creado = api_client.post(
+        "/api/v1/store-products",
+        json={
+            "tienda_id": tienda.id,
+            "external_id": "EXT-PATCH",
+            "nombre_crudo": "COCA COLA 2 LT",
+        },
+    ).json()
+
+    response = api_client.patch(
+        f"/api/v1/store-products/{creado['id']}",
+        json={"producto_id": producto.id},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["producto_id"] == producto.id
+
+
+def test_patch_desvincula_con_null(api_client, tienda) -> None:
+    creado = api_client.post(
+        "/api/v1/store-products",
+        json={
+            "tienda_id": tienda.id,
+            "external_id": "EXT-PATCH-2",
+            "nombre_crudo": "X",
+        },
+    ).json()
+
+    response = api_client.patch(
+        f"/api/v1/store-products/{creado['id']}",
+        json={"producto_id": None},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["producto_id"] is None
+
+
+def test_patch_sin_producto_id_devuelve_422(api_client) -> None:
+    response = api_client.patch("/api/v1/store-products/1", json={})
+    assert response.status_code == 422
+
+
+def test_patch_producto_inexistente_devuelve_400(api_client, tienda) -> None:
+    creado = api_client.post(
+        "/api/v1/store-products",
+        json={
+            "tienda_id": tienda.id,
+            "external_id": "EXT-PATCH-3",
+            "nombre_crudo": "X",
+        },
+    ).json()
+
+    response = api_client.patch(
+        f"/api/v1/store-products/{creado['id']}",
+        json={"producto_id": 9999},
+    )
+    assert response.status_code == 400
+
+
+def test_patch_id_inexistente_devuelve_404(api_client) -> None:
+    response = api_client.patch(
+        "/api/v1/store-products/99999",
+        json={"producto_id": None},
+    )
+    assert response.status_code == 404

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class StoreProductRead(BaseModel):
@@ -25,3 +25,15 @@ class StoreProductCreate(BaseModel):
     nombre_crudo: str = Field(min_length=1)
     marca_cruda: str | None = None
     raw_presentation: str | None = None
+
+
+class StoreProductUpdate(BaseModel):
+    """Asignacion/ajuste del match (flujo humano HU 1.4, paso 4)."""
+
+    producto_id: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def _requiere_campo(self):
+        if "producto_id" not in self.model_fields_set:
+            raise ValueError("producto_id es obligatorio (usa null para desvincular)")
+        return self

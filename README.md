@@ -281,9 +281,8 @@ del repo Data: minúsculas, sin tildes, sin puntuación, token sort):
 1. El pipeline Data ingesta productos crudos → `POST /store-products` (sin `producto_id`).
 2. El analista llama `POST /match/suggestions` por tienda.
 3. Confirma las de banda `auto` y revisa una a una las de `review`.
-4. La aceptación se materializa asignando `store_products.producto_id`
-   (asignación individual aún sin endpoint dedicado: por ahora vía SQL o
-   futura `PATCH /store-products/{id}`).
+4. La aceptación se materializa con `PATCH /api/v1/store-products/{id}`
+   (`{"producto_id": N}` para vincular, `null` para desvincular).
 5. Las filas sin match siguen listándose con `unmatched_only=true` para la
    siguiente tanda.
 

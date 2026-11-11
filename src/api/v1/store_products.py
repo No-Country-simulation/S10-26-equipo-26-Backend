@@ -4,7 +4,11 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from src.db.session import get_db
-from src.schemas.store_product import StoreProductCreate, StoreProductRead
+from src.schemas.store_product import (
+    StoreProductCreate,
+    StoreProductRead,
+    StoreProductUpdate,
+)
 from src.services import store_product_service
 
 router = APIRouter()
@@ -49,5 +53,20 @@ def get_store_product(
     store_product = store_product_service.get_store_product(
         db,
         store_product_id,
+    )
+    return StoreProductRead.model_validate(store_product)
+
+
+@router.patch("/{store_product_id}", response_model=StoreProductRead)
+def update_store_product(
+    store_product_id: int,
+    payload: StoreProductUpdate,
+    db: DbSession,
+) -> StoreProductRead:
+    """Acepta/rechaza la sugerencia de match (HU 1.4, flujo humano)."""
+    store_product = store_product_service.update_store_product(
+        db,
+        store_product_id,
+        payload,
     )
     return StoreProductRead.model_validate(store_product)
