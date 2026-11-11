@@ -6,6 +6,7 @@ from sqlalchemy.pool import StaticPool
 
 import src.models  # noqa: F401  # registra todas las entidades en Base.metadata
 from src.db.base import Base
+from src.db.session import get_db
 from src.main import app
 
 
@@ -28,3 +29,17 @@ def db_session() -> Session:
         yield session
     finally:
         session.close()
+
+
+@pytest.fixture
+def api_client(db_session: Session) -> TestClient:
+    def _override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _override_get_db
+    try:
+        with TestClient(app) as test_client:
+            yield test_client
+    finally:
+        app.dependency_overrides.clear()
+
