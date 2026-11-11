@@ -16,6 +16,7 @@ class PrecioHistoricoRead(BaseModel):
     en_oferta: bool | None = None
     tipo_cambio_usado: Decimal
     precio_usd: Decimal
+    raw_presentation: str | None = None
 
     @field_validator("timestamp", mode="after")
     @classmethod

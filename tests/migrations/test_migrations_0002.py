@@ -122,6 +122,12 @@ def test_0002_columnas_y_constraints(migrated_db: Path) -> None:
         conn.close()
 
 
+def test_0002_agrega_raw_presentation_a_precios(migrated_db: Path) -> None:
+    """Decision #6: columna de presentacion por observacion (HU 2.4)."""
+    cols = _objects(migrated_db, "precios_historicos")
+    assert "raw_presentation" in cols
+
+
 def test_0002_constraint_duplicado_efectivo(migrated_db: Path) -> None:
     conn = sqlite3.connect(migrated_db)
     try:
@@ -165,3 +171,6 @@ def test_downgrade_un_paso_quita_solo_las_tablas_0002(tmp_path: Path) -> None:
     tables = _tables(db_path)
     assert TABLAS_0001 <= tables
     assert not (TABLAS_0002 & tables)
+
+    cols = _objects(db_path, "precios_historicos")
+    assert "raw_presentation" not in cols

@@ -10,7 +10,7 @@ from src.core.exceptions import NotFoundError
 from src.db.session import get_db
 from src.models.anomaly_alert import AnomalyAlert
 from src.schemas.anomaly_alert import AnomalyAlertPatch, AnomalyAlertRead
-from src.services import alert_engine
+from src.services import alert_engine, shrinkflation_detector
 
 router = APIRouter()
 
@@ -36,6 +36,23 @@ def evaluate_alerts(
         end=end_date,
         window_days=window_days,
         threshold=threshold,
+    )
+    return [AnomalyAlertRead.model_validate(a) for a in alertas]
+
+
+@router.post(
+    "/detect-shrinkflation",
+    response_model=list[AnomalyAlertRead],
+    status_code=status.HTTP_201_CREATED,
+)
+def detect_shrinkflation(
+    db: DbSession,
+    store_product_id: Annotated[int | None, Query(ge=1)] = None,
+) -> list[AnomalyAlertRead]:
+    """Deteccion de reduflacion (HU 2.4): 500 g -> 400 g genera alerta."""
+    alertas = shrinkflation_detector.detect_shrinkflation(
+        db,
+        store_product_id=store_product_id,
     )
     return [AnomalyAlertRead.model_validate(a) for a in alertas]
 

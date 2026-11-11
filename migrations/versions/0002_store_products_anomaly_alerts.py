@@ -18,6 +18,12 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # decision #6: presentacion cruda por observacion (base de reduflacion)
+    op.add_column(
+        "precios_historicos",
+        sa.Column("raw_presentation", sa.Text(), nullable=True),
+    )
+
     op.create_table(
         "store_products",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -129,3 +135,4 @@ def downgrade() -> None:
     )
     op.drop_table("anomaly_alerts")
     op.drop_table("store_products")
+    op.drop_column("precios_historicos", "raw_presentation")

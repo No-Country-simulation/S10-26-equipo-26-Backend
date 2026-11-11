@@ -9,6 +9,7 @@ from sqlalchemy import (
     Index,
     Integer,
     Numeric,
+    Text,
     false,
     func,
     text,
@@ -55,3 +56,5 @@ class PrecioHistorico(Base):
     )
     tipo_cambio_usado: Mapped[Decimal] = mapped_column(Numeric(12, 4))
     precio_usd: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    # decision #6: presentacion cruda ("500 g") por observacion (HU 2.4)
+    raw_presentation: Mapped[str | None] = mapped_column(Text)
