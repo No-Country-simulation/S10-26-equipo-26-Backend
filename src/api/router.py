@@ -9,6 +9,7 @@ from src.api.v1 import (
     prices,
     products,
     store_products,
+    stores,
 )
 
 api_router = APIRouter()
@@ -33,3 +34,4 @@ api_router.include_router(
     tags=["store-products"],
 )
 api_router.include_router(match.router, prefix="/match", tags=["match"])
+api_router.include_router(stores.router, prefix="/stores", tags=["stores"])
