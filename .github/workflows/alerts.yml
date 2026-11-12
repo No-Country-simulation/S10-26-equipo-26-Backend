@@ -1,0 +1,25 @@
+name: Alerts cron
+
+on:
+  schedule:
+    - cron: "15 */6 * * *" # cada 6 h (desfasado del scraper)
+  workflow_dispatch:
+
+jobs:
+  alerts:
+    name: Run shrinkflation + devaluation alerts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Detect shrinkflation
+        run: |
+          curl -fsS -X POST \
+            "${{ vars.API_URL }}/api/v1/alerts/detect-shrinkflation" \
+            -H "Accept: application/json"
+
+      - name: Evaluate devaluation alerts (last 30 days)
+        run: |
+          START=$(date -u -d "30 days ago" +%F)
+          END=$(date -u +%F)
+          curl -fsS -X POST \
+            "${{ vars.API_URL }}/api/v1/alerts/evaluate?start_date=${START}&end_date=${END}" \
+            -H "Accept: application/json"
