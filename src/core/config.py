@@ -29,6 +29,17 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     log_level: str = "INFO"
 
+    # Orígenes permitidos (CORS). Override con CORS_ORIGINS="https://a,https://b"
+    cors_origins: str = (
+        "https://frontend-production-8b04.up.railway.app,"
+        "http://localhost:3000,"
+        "http://localhost:5173"
+    )
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
     database_url: str = (
         "postgresql+psycopg://pricescope:pricescope@localhost:5435/pricescope"
     )
