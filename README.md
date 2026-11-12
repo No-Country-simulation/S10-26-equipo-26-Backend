@@ -24,8 +24,8 @@ El equipo enfrenta tres problemas técnicos centrales (detalle en `problematica.
 
 | Problema | Responsabilidad del Backend | Decisión clave |
 |---|---|---|
-| **1. Identidad de productos entre tiendas** | Catálogo `productos_canonicos` + catálogo `categorias`. El vínculo producto↔tienda hoy es la fila en `precios_historicos(producto_id, tienda_id)`. | El matching es **curado manualmente** por el equipo. La tabla `store_products` (con `external_id`/`source_url`) **no existe aún** en la BD: decisión #8 de `PLAN-AGIL.md` (HU 1.2/1.4 pospuestas). |
-| **2. Promociones, stock y reduflación** | `precio_tachado` y `en_oferta` en `precios_historicos`; clasificación promo vs regular **derivada en lectura** (sin columnas persistidas); **exclusión de ofertas** (`en_oferta = true`) del índice de inflación base. | El índice de inflación base usa **solo precios regulares**. La mediana móvil es el método candidato. Las alertas (reduflación, `anomaly_alerts`) están **pospuestas**: no existe la tabla (decisión #7). |
+| **1. Identidad de productos entre tiendas** | Catálogo `productos_canonicos` + `categorias` + `store_products` (vínculo con `external_id`/`source_url`/`nombre_crudo`). El matching es **curado manualmente** por el equipo vía `POST /match/suggestions` + `PATCH /store-products/{id}`. | Tabla `store_products` creada en migración `0002` (decisión #8 resuelta). |
+| **2. Promociones, stock y reduflación** | `precio_tachado` y `en_oferta` en `precios_historicos`; clasificación promo vs regular **derivada en lectura** (sin columnas persistidas); **exclusión de ofertas** del índice de inflación base. Detección de reduflación en `anomaly_alerts`. | El índice usa **solo precios regulares** (mediana móvil 7d). Tabla `anomaly_alerts` creada en migración `0002` (decisión #7 resuelta); `raw_presentation` por observación. |
 | **3. Sincronización timestamp ↔ tipo de cambio** | Tabla `historial_divisas` (`timestamp` PK, oficial + paralelo en la misma fila). `precio_usd` y `tipo_cambio_usado` **se persisten** en `precios_historicos`, calculados por el pipeline Data en el momento de la captura. | La BD es **Railway Postgres** (proyecto `s10-26-equipo-26`); en local se conecta vía túnel SSH. |
 
 Flujo de datos y orden de dependencias:
@@ -213,10 +213,13 @@ Historial de tipos de cambio: una fila por instante con ambas cotizaciones.
 
 Sin `id`, sin `base_currency`/`quote_currency` y sin `source`. El "FX as of" se resuelve con `WHERE timestamp <= :ts ORDER BY timestamp DESC LIMIT 1` (la PK ya indexa `timestamp`); el upsert es por `timestamp`.
 
-### Tablas **no existentes** (pospuestas)
+### Tablas de la migración `0002`
 
-- `store_products` — requeriría cambio de BD (decisión #8; bloquea HU 1.2 y HU 1.4).
-- `anomaly_alerts` — requeriría cambio de BD (decisión #7; bloquea HU 2.4 y HU 3.5).
+- `store_products` — vínculo producto↔tienda con `external_id`, `source_url`, `nombre_crudo`, `raw_presentation`; UNIQUE `(tienda_id, external_id)`; `producto_id` nullable (sin matchear).
+- `anomaly_alerts` — alertas `shrinkflation` / `outpace_devaluation` con `score`, `severity`, `status`, `details` JSONB e índice `(status, created_at DESC)`.
+- `precios_historicos.raw_presentation` — presentación cruda por observación (base de reduflación).
+
+> Aplicadas en BD local Docker (`alembic_version=0002`); pendientes en Railway vía deploy.
 
 ## 6. API REST
 
@@ -395,7 +398,7 @@ Cada registro de precio debería contener como mínimo (para mapear a `precios_h
 - Precio tachado o anterior (`precio_tachado`) cuando exista.
 - Señal de oferta (`en_oferta`; badge, `2x1`, etc.).
 - Momento de la captura (`timestamp`).
-- Presentación/gramaje crudo, si la tienda lo expone (aún **sin columna de persistencia**: base futura de reduflación, decisión #7).
+- Presentación/gramaje crudo, si la tienda lo expone (`precios_historicos.raw_presentation`, columna de la migración `0002`).
 
 Y para el job FX (para mapear a `historial_divisas`):
 
@@ -405,7 +408,7 @@ Reglas de integración:
 
 - El pipeline **calcula y persiste** `precio_usd` y `tipo_cambio_usado` en la misma fila de `precios_historicos`, usando el FX vigente en el `timestamp` de la captura (no un FX futuro).
 - **La BD (Railway) es del equipo**: las migraciones de esquema viven en este repo y se aplican en el deploy o localmente vía túnel, coordinadas con el equipo.
-- La identidad canónica es `productos_canonicos`; mientras no exista `store_products` (decisión #8), el scraping no persiste `external_id`/`source_url` en esta BD.
+- La identidad canónica es `productos_canonicos`; el scraping persiste `external_id`/`source_url`/`nombre_crudo` en `store_products` (migración `0002`).
 
 ### Estrategia recomendada para el MVP
 
@@ -606,6 +609,6 @@ Antes de ampliar el alcance, confirmar:
 7. Disponibilidad y calidad del historial.
 8. Ejecución de tareas periódicas.
 9. Configuración de despliegue y demostración.
-10. Cambios de BD pendientes: tabla `store_products` (#8) y `anomaly_alerts` (#7) — a plantear al equipo técnico (ver `PLAN-AGIL.md`).
+10. ~~Cambios de BD pendientes~~ **✅ Resuelto: `store_products` (#8) y `anomaly_alerts` (#7) creadas en migración `0002` (aplicada en BD local; pendiente Railway por deploy).**
 
 La prioridad es completar un flujo end-to-end pequeño y confiable. Toda funcionalidad adicional debe justificarse por su contribución a la demo o por una necesidad concreta del MVP.
