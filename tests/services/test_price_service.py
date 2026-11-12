@@ -150,3 +150,25 @@ def test_history_vacio(db_session) -> None:
     resultado = price_service.get_price_history(db_session)
     assert resultado.total == 0
     assert resultado.items == []
+
+def test_history_incluye_raw_presentation(db_session) -> None:
+    producto = ProductoCanonico(nombre_universal="Yerba 500 g")
+    tienda = Tienda(nombre="Coto")
+    db_session.add_all([producto, tienda])
+    db_session.flush()
+    db_session.add(
+        PrecioHistorico(
+            timestamp=DIA1,
+            producto_id=producto.id,
+            tienda_id=tienda.id,
+            precio_local="1000.00",
+            tipo_cambio_usado="1000.0000",
+            precio_usd="1.00",
+            raw_presentation="Yerba 500 g",
+        )
+    )
+    db_session.commit()
+
+    resultado = price_service.get_price_history(db_session, producto_id=producto.id)
+
+    assert resultado.items[0].raw_presentation == "Yerba 500 g"
