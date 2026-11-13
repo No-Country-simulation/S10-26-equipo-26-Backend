@@ -30,6 +30,7 @@ def _to_price_point(row: PrecioHistorico) -> PricePoint:
         tipo_cambio_usado=row.tipo_cambio_usado,
         precio_usd=row.precio_usd,
         raw_presentation=row.raw_presentation,
+        disponible=row.disponible,
         is_promotion=clasificacion.is_promotion,
         price_regular=clasificacion.price_regular,
         discount_pct=clasificacion.discount_pct,

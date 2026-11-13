@@ -69,6 +69,20 @@ def test_history_devuelve_precio_usd_persistido(escenario, db_session) -> None:
     assert mismo_precio_local[1].tipo_cambio_usado == Decimal("1250.0000")
 
 
+def test_history_pasa_disponible(escenario, db_session) -> None:
+    """HU 2.1: `disponible` se refleja en PricePoint (None = desconocido)."""
+    escenario["filas"][0].disponible = True
+    escenario["filas"][2].disponible = False
+    db_session.commit()
+
+    resultado = price_service.get_price_history(
+        db_session,
+        producto_id=escenario["producto"].id,
+    )
+
+    assert [p.disponible for p in resultado.items] == [True, None, False]
+
+
 def test_history_clasifica_promo_al_leer(escenario, db_session) -> None:
     resultado = price_service.get_price_history(
         db_session,
