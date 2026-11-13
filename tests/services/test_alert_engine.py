@@ -141,6 +141,29 @@ def test_idempotente_no_duplica_alertas_abiertas(db_session) -> None:
     assert db_session.query(AnomalyAlert).count() == 1
 
 
+def test_idempotente_con_ventana_deslizante(db_session) -> None:
+    """El cron usa `30 days ago` en cada corrida: una alerta open del
+    mismo producto bloquea aunque start/end cambien."""
+    _seed(db_session, "130.00")
+
+    primera = alert_engine.evaluate_outpace_devaluation(
+        db_session,
+        start=DIA1,
+        end=DIA7,
+        window_days=1,
+    )
+    segunda = alert_engine.evaluate_outpace_devaluation(
+        db_session,
+        start=DIA1.replace(day=2),
+        end=DIA7.replace(day=8),
+        window_days=1,
+    )
+
+    assert len(primera) == 1
+    assert segunda == []
+    assert db_session.query(AnomalyAlert).count() == 1
+
+
 def test_umbral_configurable(db_session) -> None:
     _seed(db_session, "125.00")  # gap 0.05
 

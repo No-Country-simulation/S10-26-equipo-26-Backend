@@ -61,6 +61,9 @@ def _alerta_abierta_existe(
     start: date,
     end: date,
 ) -> bool:
+    """True si el producto ya tiene una alerta open (ventana deslizante:
+    el cron recalcula start/end cada corrida; no se acumulan duplicados)."""
+    del start, end  # la ventana ya no participa en el dedup
     existente = db.scalars(
         select(AnomalyAlert).where(
             AnomalyAlert.alert_type == "outpace_devaluation",
@@ -68,12 +71,7 @@ def _alerta_abierta_existe(
             AnomalyAlert.producto_id == producto_id,
         ),
     ).first()
-    if existente is None:
-        return False
-    return (
-        existente.details.get("start") == start.isoformat()
-        and existente.details.get("end") == end.isoformat()
-    )
+    return existente is not None
 
 
 def evaluate_outpace_devaluation(
