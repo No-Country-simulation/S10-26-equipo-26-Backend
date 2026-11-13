@@ -163,7 +163,8 @@ def test_downgrade_un_paso_quita_solo_las_tablas_0002(tmp_path: Path) -> None:
     result = _run_alembic(["upgrade", "head"], db_path)
     assert result.returncode == 0, result.stderr
 
-    result = _run_alembic(["downgrade", "-1"], db_path)
+    # head incluye 0003: hay que bajar dos pasos para llegar al estado pre-0002.
+    result = _run_alembic(["downgrade", "-2"], db_path)
     assert result.returncode == 0, (
         f"alembic downgrade fallo:\n{result.stdout}\n{result.stderr}"
     )

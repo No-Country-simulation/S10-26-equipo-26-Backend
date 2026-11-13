@@ -58,3 +58,5 @@ class PrecioHistorico(Base):
     precio_usd: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     # decision #6: presentacion cruda ("500 g") por observacion (HU 2.4)
     raw_presentation: Mapped[str | None] = mapped_column(Text)
+    # HU 2.1: stock al momento del scrape; NULL = desconocido
+    disponible: Mapped[bool | None] = mapped_column(Boolean, default=None)
